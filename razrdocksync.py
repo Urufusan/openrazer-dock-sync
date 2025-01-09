@@ -1,14 +1,15 @@
 # Copyright 2025 Urufusan.
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import os
 import time
+
 import openrazer.client
 from openrazer.client.devices import RazerDevice
 
-import os
-
 if os.environ.get("RZR_IPY_DEBUG", False):
     import IPython
+
 import sys
 
 # TODO: add nicer configuration (read from ~/.config, use configparser)
