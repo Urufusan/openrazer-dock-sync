@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 # Copyright 2025 Urufusan.
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -16,7 +17,7 @@ import sys
 # TODO: use click for CLI
 # * https://docs.python.org/3/library/configparser.html
 
-MOUSE_NAME = "Razer Naga Pro" 
+MOUSE_NAME = "Razer Naga Pro"
 
 GRADIENT = [
     {"color": "#220000", "position": 0},
@@ -25,20 +26,25 @@ GRADIENT = [
     {"color": "#00ff00", "position": 100},
 ]
 
+POLL_DELAY_CONST = int(os.environ.get("RZR_SLEEPFOR", 360))
+
 
 def hex_to_rgb(hex_value):
     return tuple(int(hex_value.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
 
 
-def pick_color_from_gradient(value, gradient_map, returnmethod="hex"):
-    # Define your gradient colors and positions
+def pick_gradient_color(value, gradient_map, returnmethod="hex"):
+    """## Generates color based on the input value
 
-    # gradient = [
-    #    {'color': '#03ee80', 'position': 0},
-    #    {'color': '#ab77ff', 'position': 0.4},
-    #    {'color': '#ff0040', 'position': 1}
-    # ]
-
+    Define your gradient colors and positions with either floats or ints:
+    ```
+    gradient = [
+       {'color': '#03ee80', 'position': 0},
+       {'color': '#ab77ff', 'position': 0.4},
+       {'color': '#ff0040', 'position': 1}
+    ]
+    ```
+    """
     # select value
     for i in range(len(gradient_map) - 1):
         if value <= gradient_map[i + 1]["position"]:
@@ -61,6 +67,18 @@ def pick_color_from_gradient(value, gradient_map, returnmethod="hex"):
             return r, g, b
 
 
+def check_if_present(dock_device: RazerDevice, mouse_device: RazerDevice) -> bool:
+    """## Returns ``True`` if both the mouse and the dock are present"""
+    # * DPI values that are (0, 0) imply that the dongle is connected but the mouse is not.
+    if not (bool(mouse_device) and bool(dock_device)) or getattr(mouse_device, "dpi", None) == (0, 0):
+        if dock_device:
+            if dock_device.fx.effect != "breathSingle":
+                dock_device.fx.breath_single(50, 70, 255)
+        print(f"(One or more) required devices is not present:\n({mouse_device=}, {dock_device=})")
+        return False
+    return True
+
+
 if __name__ == "__main__":
     devman = openrazer.client.DeviceManager()
     devman.sync_effects = False
@@ -69,13 +87,12 @@ if __name__ == "__main__":
     print(devices)
     dock_device = None
     mouse_device = None
+
     for razer_device in devices:
         if "Dock" in razer_device.name:
             dock_device = razer_device
-
         if MOUSE_NAME in razer_device.name:
             mouse_device = razer_device
-
         if not razer_device.battery_level:
             continue
 
@@ -85,21 +102,31 @@ if __name__ == "__main__":
         IPython.embed(colors="neutral")
         exit(0)
 
-    if not (bool(mouse_device) and bool(dock_device)) or getattr(mouse_device, "dpi", None) == (0, 0):
-        if dock_device:
-            if dock_device.fx.effect != "breathSingle":
-                dock_device.fx.breath_single(50, 70, 255)
-        print(f"Required devices not present\n({mouse_device=}, {dock_device=})")
-        exit(1)
+    if not (_present := check_if_present(dock_device, mouse_device)):
+        # ! I added the this logic because the mouse is not always connected upon OS startup
+        for _ in range(6):
+            time.sleep(6)
+            _present = check_if_present(dock_device, mouse_device)
+            if _present:
+                break
+        else:
+            print("Startup failed, retried 6 times")
+            exit(1)
 
     dock_device.brightness = 100.0
 
-    match tuple(sys.argv[1:2]):
-        case ("test",):
-            while _rgb_input := input(">> "):
-                dock_device.fx.static(*list(map((lambda _x: max(min(int(_x), 255), 0)), _rgb_input.split())))
-        case _:
-            dock_device.fx.static(*pick_color_from_gradient(mouse_device.battery_level, GRADIENT, 0))
+    if tuple(sys.argv[1:2]) == ("test",):
+        while _rgb_input := input(">> "):
+            dock_device.fx.static(*list(map((lambda _x: max(min(int(_x), 255), 0)), _rgb_input.split())))
+        exit(0)
 
-    if _sleeptime := int(os.environ.get("RZR_SLEEPFOR", 0)):
-        time.sleep(_sleeptime)
+    while _present:
+        if not check_if_present(dock_device, mouse_device):
+            print("Retrying...")
+            time.sleep(5)
+            continue
+
+        _gradient_color = pick_gradient_color(mouse_device.battery_level, GRADIENT, 0)
+        print("Dock <----", _gradient_color)
+        dock_device.fx.static(*_gradient_color)
+        time.sleep(POLL_DELAY_CONST)
