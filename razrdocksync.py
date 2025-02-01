@@ -8,16 +8,10 @@ import time
 import openrazer.client
 from openrazer.client.devices import RazerDevice
 
-if os.environ.get("RZR_IPY_DEBUG", False):
-    import IPython
-
-import sys
-
-# TODO: add nicer configuration (read from ~/.config, use configparser)
-# TODO: use click for CLI
-# * https://docs.python.org/3/library/configparser.html
-
-MOUSE_NAME = "Razer Naga Pro"
+CHROMA_DOCK_MICE_NAMES = ["Razer Naga Pro",
+                    "Razer DeathAdder V2 Pro",
+                    "Razer Basilisk Ultimate",
+                    "Razer Viper Ultimate"]
 
 GRADIENT = [
     {"color": "#220000", "position": 0},
@@ -27,6 +21,8 @@ GRADIENT = [
 ]
 
 POLL_DELAY_CONST = int(os.environ.get("RZR_SLEEPFOR", 360))
+QUICK_RETRIES_AMOUT = 6 # Does a shallow check, doesn't reinit dbus
+FULL_RETRIES_AMOUT = 2 # Does a 'full' refresh (devices that weren't there before will now be shown)
 
 
 def hex_to_rgb(hex_value):
@@ -80,7 +76,7 @@ def check_if_present(dock_device: RazerDevice, mouse_device: RazerDevice) -> boo
 
 
 if __name__ == "__main__":
-    for _init_try in range(2):
+    for _init_try in range(FULL_RETRIES_AMOUT):
         dock_device = None
         mouse_device = None
 
@@ -93,40 +89,31 @@ if __name__ == "__main__":
         for razer_device in devices:
             if "Dock" in razer_device.name:
                 dock_device = razer_device
-            if MOUSE_NAME in razer_device.name:
+            if any(_mouse_name in razer_device.name for _mouse_name in CHROMA_DOCK_MICE_NAMES):
                 mouse_device = razer_device
             if not razer_device.battery_level:
                 continue
 
             print(f"{razer_device.name} is at {razer_device.battery_level}% battery.")
 
-        if os.environ.get("RZR_IPY_DEBUG", False):
-            IPython.embed(colors="neutral")
-            exit(0)
-
         if not (_present := check_if_present(dock_device, mouse_device)):
             # ! I added the this logic because the mouse is not always connected upon OS startup
-            for _ in range(6):
+            for _ in range(QUICK_RETRIES_AMOUT):
                 time.sleep(5)
                 _present = check_if_present(dock_device, mouse_device)
                 if _present:
                     break
             else:
-                if _init_try:
-                    print("Startup failed, retried 12 times")
+                if _init_try == FULL_RETRIES_AMOUT - 1:
+                    print(f"Startup failed, retried {QUICK_RETRIES_AMOUT*FULL_RETRIES_AMOUT} times")
                     if dock_device:
                         dock_device.fx.static(139, 0, 181)
                     exit(1)
                 else:
-                    print("6 tries failed...")
+                    print(f"{QUICK_RETRIES_AMOUT} tries failed...")
                     continue
 
         dock_device.brightness = 100.0
-
-        if tuple(sys.argv[1:2]) == ("test",):
-            while _rgb_input := input(">> "):
-                dock_device.fx.static(*list(map((lambda _x: max(min(int(_x), 255), 0)), _rgb_input.split())))
-            exit(0)
 
         while _present:
             if not check_if_present(dock_device, mouse_device):
@@ -135,6 +122,6 @@ if __name__ == "__main__":
                 continue
 
             _gradient_color = pick_gradient_color(mouse_device.battery_level, GRADIENT, 0)
-            print("Dock <----", _gradient_color)
+            print("Dock: ", _gradient_color)
             dock_device.fx.static(*_gradient_color)
             time.sleep(POLL_DELAY_CONST)
