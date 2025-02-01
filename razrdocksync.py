@@ -8,10 +8,7 @@ import time
 import openrazer.client
 from openrazer.client.devices import RazerDevice
 
-CHROMA_DOCK_MICE_NAMES = ["Razer Naga Pro",
-                    "Razer DeathAdder V2 Pro",
-                    "Razer Basilisk Ultimate",
-                    "Razer Viper Ultimate"]
+CHROMA_DOCK_MICE_NAMES = ["Razer Naga Pro", "Razer DeathAdder V2 Pro", "Razer Basilisk Ultimate", "Razer Viper Ultimate"]
 
 GRADIENT = [
     {"color": "#220000", "position": 0},
@@ -21,8 +18,8 @@ GRADIENT = [
 ]
 
 POLL_DELAY_CONST = int(os.environ.get("RZR_SLEEPFOR", 360))
-QUICK_RETRIES_AMOUT = 6 # Does a shallow check, doesn't reinit dbus
-FULL_RETRIES_AMOUT = 2 # Does a 'full' refresh (devices that weren't there before will now be shown)
+QUICK_RETRIES_AMOUT = 6  # Does a shallow check, doesn't reinit dbus
+FULL_RETRIES_AMOUT = 2  # Does a 'full' refresh (devices that weren't there before will now be shown)
 
 
 def hex_to_rgb(hex_value):
